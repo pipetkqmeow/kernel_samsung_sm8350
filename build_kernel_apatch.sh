@@ -25,8 +25,7 @@ COMMON=(
   CONFIG_SECTION_MISMATCH_WARN_ONLY=y
 )
 
-DEFCONFIG="${1:-vendor/o1q_apatch_defconfig}"
-make -C "$PWD" O="$PWD/out" "${COMMON[@]}" "$DEFCONFIG"
+make -C "$PWD" O="$PWD/out" "${COMMON[@]}" vendor/o1q_apatch_defconfig
 make -C "$PWD" O="$PWD/out" "${COMMON[@]}" -j"$(nproc)"
 
 cp out/arch/arm64/boot/Image arch/arm64/boot/Image
