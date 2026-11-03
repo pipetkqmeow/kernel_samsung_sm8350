@@ -2438,6 +2438,49 @@ static int path_lookupat(struct nameidata *nd, unsigned flags, struct path *path
 	return err;
 }
 
+/*
+ * Path concealment: well-known superuser binary locations are reported
+ * as non-existent (-ENOENT) to Android application UIDs (app_zygote and
+ * everything above). Root (0) and adb shell (2000) keep native
+ * visibility so `su` keeps working from adb. Covers stat/lstat/statx/
+ * access/faccessat/open/openat (filename_lookup) and open/execve
+ * (do_filp_open).
+ */
+static const char * const pg_hidden_paths[] = {
+	"/system/bin/su",
+	"/system/xbin/su",
+	"/system/sbin/su",
+	"/system/bin/.ext/.su",
+	"/sbin/su",
+	"/su/bin/su",
+	"/vendor/bin/su",
+	"/odm/bin/su",
+	NULL,
+};
+
+static bool pg_is_hidden_path(const struct filename *name)
+{
+	const char *n;
+	int i;
+
+	if (!name || IS_ERR(name) || !name->name)
+		return false;
+	n = name->name;
+	if (n[0] != '/' || n[1] == '\0')
+		return false;
+	for (i = 0; pg_hidden_paths[i]; i++)
+		if (strcmp(n, pg_hidden_paths[i]) == 0)
+			return true;
+	return false;
+}
+
+static __always_inline bool pg_hidden_for_current(const struct filename *name)
+{
+	if (current_uid().val < 9000)
+		return false;
+	return pg_is_hidden_path(name);
+}
+
 int filename_lookup(int dfd, struct filename *name, unsigned flags,
 		    struct path *path, struct path *root)
 {
@@ -2445,6 +2488,8 @@ int filename_lookup(int dfd, struct filename *name, unsigned flags,
 	struct nameidata nd;
 	if (IS_ERR(name))
 		return PTR_ERR(name);
+	if (unlikely(pg_hidden_for_current(name)))
+		return -ENOENT;
 	if (unlikely(root)) {
 		nd.root = *root;
 		flags |= LOOKUP_ROOT;
@@ -3738,6 +3783,9 @@ struct file *do_filp_open(int dfd, struct filename *pathname,
 	struct nameidata nd;
 	int flags = op->lookup_flags;
 	struct file *filp;
+
+	if (unlikely(pg_hidden_for_current(pathname)))
+		return ERR_PTR(-ENOENT);
 
 	set_nameidata(&nd, dfd, pathname);
 	filp = path_openat(&nd, op, flags | LOOKUP_RCU);
