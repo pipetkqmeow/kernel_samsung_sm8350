@@ -164,7 +164,6 @@ static ssize_t fuse_conn_congestion_threshold_write(struct file *file,
 {
 	unsigned val;
 	struct fuse_conn *fc;
-	struct fuse_mount *fm;
 	ssize_t ret;
 
 	ret = fuse_conn_limit_write(file, buf, count, ppos, &val,
@@ -175,27 +174,18 @@ static ssize_t fuse_conn_congestion_threshold_write(struct file *file,
 	if (!fc)
 		goto out;
 
-	down_read(&fc->killsb);
 	spin_lock(&fc->bg_lock);
 	fc->congestion_threshold = val;
-
-	/*
-	 * Get any fuse_mount belonging to this fuse_conn; s_bdi is
-	 * shared between all of them
-	 */
-
-	if (!list_empty(&fc->mounts)) {
-		fm = list_first_entry(&fc->mounts, struct fuse_mount, fc_entry);
+	if (fc->sb) {
 		if (fc->num_background < fc->congestion_threshold) {
-			clear_bdi_congested(fm->sb->s_bdi, BLK_RW_SYNC);
-			clear_bdi_congested(fm->sb->s_bdi, BLK_RW_ASYNC);
+			clear_bdi_congested(fc->sb->s_bdi, BLK_RW_SYNC);
+			clear_bdi_congested(fc->sb->s_bdi, BLK_RW_ASYNC);
 		} else {
-			set_bdi_congested(fm->sb->s_bdi, BLK_RW_SYNC);
-			set_bdi_congested(fm->sb->s_bdi, BLK_RW_ASYNC);
+			set_bdi_congested(fc->sb->s_bdi, BLK_RW_SYNC);
+			set_bdi_congested(fc->sb->s_bdi, BLK_RW_ASYNC);
 		}
 	}
 	spin_unlock(&fc->bg_lock);
-	up_read(&fc->killsb);
 	fuse_conn_put(fc);
 out:
 	return ret;
@@ -328,7 +318,7 @@ void fuse_ctl_remove_conn(struct fuse_conn *fc)
 	drop_nlink(d_inode(fuse_control_sb->s_root));
 }
 
-static int fuse_ctl_fill_super(struct super_block *sb, struct fs_context *fsc)
+static int fuse_ctl_fill_super(struct super_block *sb, struct fs_context *fctx)
 {
 	static const struct tree_descr empty_descr = {""};
 	struct fuse_conn *fc;
@@ -354,18 +344,18 @@ static int fuse_ctl_fill_super(struct super_block *sb, struct fs_context *fsc)
 	return 0;
 }
 
-static int fuse_ctl_get_tree(struct fs_context *fsc)
+static int fuse_ctl_get_tree(struct fs_context *fc)
 {
-	return get_tree_single(fsc, fuse_ctl_fill_super);
+	return get_tree_single(fc, fuse_ctl_fill_super);
 }
 
 static const struct fs_context_operations fuse_ctl_context_ops = {
 	.get_tree	= fuse_ctl_get_tree,
 };
 
-static int fuse_ctl_init_fs_context(struct fs_context *fsc)
+static int fuse_ctl_init_fs_context(struct fs_context *fc)
 {
-	fsc->ops = &fuse_ctl_context_ops;
+	fc->ops = &fuse_ctl_context_ops;
 	return 0;
 }
 
@@ -395,7 +385,7 @@ int __init fuse_ctl_init(void)
 	return register_filesystem(&fuse_ctl_fs_type);
 }
 
-void fuse_ctl_cleanup(void)
+void __exit fuse_ctl_cleanup(void)
 {
 	unregister_filesystem(&fuse_ctl_fs_type);
 }

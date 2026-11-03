@@ -281,8 +281,6 @@ enum bpf_reg_type {
 	PTR_TO_TCP_SOCK_OR_NULL, /* reg points to struct tcp_sock or NULL */
 	PTR_TO_TP_BUFFER,	 /* reg points to a writable raw tp's buffer */
 	PTR_TO_XDP_SOCK,	 /* reg points to struct xdp_sock */
-	PTR_TO_RDONLY_BUF,	 /* reg points to a readonly buffer */
-	PTR_TO_RDWR_BUF,	 /* reg points to a read/write buffer */
 };
 
 /* The information passed from prog-specific *_is_valid_access
@@ -368,9 +366,6 @@ struct bpf_prog_stats {
 };
 
 struct bpf_prog_aux {
-	/* FUSE-BPF: highest ctx-buffer offsets accessed by the program */
-	u32 max_rdonly_access;
-	u32 max_rdwr_access;
 	atomic_t refcnt;
 	u32 used_map_cnt;
 	u32 max_ctx_offset;
