@@ -334,7 +334,9 @@ static bool reg_type_may_be_null(enum bpf_reg_type type)
 	return type == PTR_TO_MAP_VALUE_OR_NULL ||
 	       type == PTR_TO_SOCKET_OR_NULL ||
 	       type == PTR_TO_SOCK_COMMON_OR_NULL ||
-	       type == PTR_TO_TCP_SOCK_OR_NULL;
+	       type == PTR_TO_TCP_SOCK_OR_NULL ||
+	       type == PTR_TO_RDONLY_BUF ||
+	       type == PTR_TO_RDWR_BUF;
 }
 
 static bool reg_may_point_to_spin_lock(const struct bpf_reg_state *reg)
@@ -399,6 +401,8 @@ static const char * const reg_type_str[] = {
 	[PTR_TO_TCP_SOCK_OR_NULL] = "tcp_sock_or_null",
 	[PTR_TO_TP_BUFFER]	= "tp_buffer",
 	[PTR_TO_XDP_SOCK]	= "xdp_sock",
+	[PTR_TO_RDONLY_BUF]	= "rdonly_buf",
+	[PTR_TO_RDWR_BUF]	= "rdwr_buf",
 };
 
 static char slot_type_char[] = {
@@ -1873,6 +1877,8 @@ static bool is_spillable_regtype(enum bpf_reg_type type)
 	case PTR_TO_TCP_SOCK:
 	case PTR_TO_TCP_SOCK_OR_NULL:
 	case PTR_TO_XDP_SOCK:
+	case PTR_TO_RDONLY_BUF:
+	case PTR_TO_RDWR_BUF:
 		return true;
 	default:
 		return false;
@@ -2817,6 +2823,25 @@ static int bpf_map_direct_read(struct bpf_map *map, int off, int size, u64 *val)
  * if t==write && value_regno==-1, some unknown value is stored into memory
  * if t==read && value_regno==-1, don't care what we read from memory
  */
+/* Bounds-check an access through a ctx buffer pointer (FUSE-BPF). */
+static int check_buffer_access(struct bpf_verifier_env *env, int regno,
+			       const struct bpf_reg_state *reg,
+			       int off, int size, const char *buf_info,
+			       u32 *max_access)
+{
+	if (size < 0 || off < 0 ||
+	    (u64)off + size > reg->umax_value) {
+		verbose(env, "invalid access to %s, off=%d size=%d, umax=%llu\n",
+			buf_info, off, size, reg->umax_value);
+		return -EACCES;
+	}
+
+	if (off + size > *max_access)
+		*max_access = off + size;
+
+	return 0;
+}
+
 static int check_mem_access(struct bpf_verifier_env *env, int insn_idx, u32 regno,
 			    int off, int bpf_size, enum bpf_access_type t,
 			    int value_regno, bool strict_alignment_once)
@@ -2958,6 +2983,21 @@ static int check_mem_access(struct bpf_verifier_env *env, int insn_idx, u32 regn
 			mark_reg_unknown(env, regs, value_regno);
 	} else if (reg->type == PTR_TO_TP_BUFFER) {
 		err = check_tp_buffer_access(env, reg, regno, off, size);
+		if (!err && t == BPF_READ && value_regno >= 0)
+			mark_reg_unknown(env, regs, value_regno);
+	} else if (reg->type == PTR_TO_RDONLY_BUF) {
+		if (t == BPF_WRITE) {
+			verbose(env, "R%d cannot write into %s\n",
+				regno, reg_type_str[reg->type]);
+			return -EACCES;
+		}
+		err = check_buffer_access(env, regno, reg, off, size, "rdonly",
+					  &env->prog->aux->max_rdonly_access);
+		if (!err && value_regno >= 0)
+			mark_reg_unknown(env, regs, value_regno);
+	} else if (reg->type == PTR_TO_RDWR_BUF) {
+		err = check_buffer_access(env, regno, reg, off, size, "rdwr",
+					  &env->prog->aux->max_rdwr_access);
 		if (!err && t == BPF_READ && value_regno >= 0)
 			mark_reg_unknown(env, regs, value_regno);
 	} else {

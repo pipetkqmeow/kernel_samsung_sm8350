@@ -633,6 +633,18 @@ do {										\
 	___wait_event(wq, condition, TASK_INTERRUPTIBLE, 1, 0,			\
 			freezable_schedule())
 
+#define __wait_event_freezable_state_exclusive(wq, condition, state)		\
+	___wait_event(wq, condition, state, 1, 0, freezable_schedule())
+
+#define wait_event_freezable_state_exclusive(wq, condition, state)		\
+({										\
+	int __ret = 0;								\
+	might_sleep();								\
+	if (!(condition))							\
+		__ret = __wait_event_freezable_state_exclusive(wq, condition, state);\
+	__ret;									\
+})
+
 #define wait_event_freezable_exclusive(wq, condition)				\
 ({										\
 	int __ret = 0;								\
