@@ -1,7 +1,8 @@
 #!/bin/bash
-# Build the G9910 (o1q) kernel with built-in KernelSU (backslashxx) and
-# Hybrid Mount's VFS subsystem.  Samsung FASTUH/RKP/KDP, DEFEX and HDM are
-# disabled in vendor/o1q_ksu_hybrid_defconfig.
+# Build the G9910 (o1q) kernel WITHOUT any root manager baked in.
+# Root is provided by APatch (KernelPatch) which patches the kernel
+# image after the build (kptools).  Samsung FASTUH/RKP/KDP, DEFEX and
+# HDM are disabled in vendor/o1q_apatch_defconfig, fuse-bpf is enabled.
 set -e
 cd "$(dirname "$0")"
 
@@ -24,7 +25,7 @@ COMMON=(
   CONFIG_SECTION_MISMATCH_WARN_ONLY=y
 )
 
-make -C "$PWD" O="$PWD/out" "${COMMON[@]}" vendor/o1q_ksu_hybrid_defconfig
+make -C "$PWD" O="$PWD/out" "${COMMON[@]}" vendor/o1q_apatch_defconfig
 make -C "$PWD" O="$PWD/out" "${COMMON[@]}" -j"$(nproc)"
 
 cp out/arch/arm64/boot/Image arch/arm64/boot/Image

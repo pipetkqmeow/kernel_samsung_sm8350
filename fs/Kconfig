@@ -342,5 +342,4 @@ config SEC_DEBUG_FPUT_WATCHDOG_TIMEOUT
 	depends on SEC_DEBUG_FPUT_WATCHDOG
 
 
-source "fs/hybridmount/Kconfig"
 endmenu
