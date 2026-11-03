@@ -1133,3 +1133,7 @@ CONFIG_PANEL_S6E3FAB_AMB624XT01_FHD=y
 CONFIG_DISPLAY_SAMSUNG=y
 # size-optimized build so the KP-patched kernel fits the stock boot layout
 CONFIG_CC_OPTIMIZE_FOR_SIZE=y
+
+# required by Android userspace (init/zygote die without it); KSU used to select it
+CONFIG_SECCOMP=y
+CONFIG_SECCOMP_FILTER=y
