@@ -1,0 +1,17 @@
+# Build artifacts
+out/
+*.o
+*.ko
+*.cmd
+*.mod
+*.mod.c
+Module.symvers
+modules.order
+.vmlinux.objs
+
+# Never commit toolchains (they were removed from history once already)
+toolchain/
+
+# Samsung build scripts output
+*.tar.md5
+*.img
